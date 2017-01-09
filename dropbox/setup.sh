@@ -2,7 +2,7 @@
 set -e
 
 # Execute deamon for first-time setup
-dropboxd &
+dropboxd >&2 &
 DROPBOXD_PID=$!
 
 # Wait for setup to complete
