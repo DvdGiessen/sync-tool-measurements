@@ -2,7 +2,7 @@
 set -e
 
 # Execute deamon for first-time setup
-dropboxd &
+dropboxd > >( while IFS= read -r line ; do echo "[$(date +%s.%N)] $line" ; done ) &
 DROPBOXD_PID=$!
 
 # Wait for setup to complete
@@ -12,11 +12,13 @@ kill -s TERM $DROPBOXD_PID
 wait $DROPBOXD_PID 2>/dev/null || true
 
 # Check for Dropbox directory existance
-if [[ ! -d "~/Dropbox" ]] ; then
+eval DROPBOXDIR="~/Dropbox"
+if [[ ! -d "$DROPBOXDIR" ]] ; then
     echo -e "[$(date +%s.%N)] \e[91mDropbox direcory not found, presumably setup failed.\e[0m"
     exit 1
 fi
 
-# Symlink workdir to Dropbox directory
-rm -rf $WORKDIR
-ln -s ~/Dropbox $WORKDIR
+# Move Dropbox directory contents to workdir and symlink it
+mv "$DROPBOXDIR"/.[^.]* "$WORKDIR"
+rm -rf "$DROPBOXDIR"
+ln -s "$WORKDIR" "$DROPBOXDIR"
