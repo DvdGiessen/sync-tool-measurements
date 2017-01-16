@@ -77,7 +77,7 @@ for TESTSCRIPT in /synctool-start.sh /tests/*.sh /synctool-stop.sh ; do
         STATE=$(find "$WORKDIR" \( ! -regex '.*/\..*' \) -type f -exec cksum {} \; | sort)
         
         # Check for no-ops
-        if [[ "$STATE" == "$PREVIOUSSTATE" ]] ; then
+        if [[ "$STATE" == "$PREVIOUSSTATE" ]] && [[ "$TESTSCRIPT" != "/synctool-stop.sh" ]] ; then
             echo -e "[$(date +%s.%N)] \e[91mThe state was unaltered after running $TESTSCRIPT!\e[0m" >&2
         fi
         PREVIOUSSTATE="$STATE"
