@@ -1,6 +1,56 @@
 #!/bin/bash
+if [ -z "$BASH" ] ; then
+    echo "This script must be run with bash" >&2
+    exit 1
+fi
 set -eu
-cd /
+
+# Usage / help text
+print_usage() {
+    echo "Usage: $0 [-v] PEERCOUNT"
+    echo ""
+    echo "Sets up a test runner into the current Docker container."
+    echo ""
+    echo "Options:"
+    echo "    -?             Print this message."
+    echo "    -v             Enable verbose output."
+    echo "    PEERCOUNT      Number of peers to sync up with."
+    echo ""
+    exit 1
+}
+
+# Define argument variables
+PEERCOUNT=-1
+VERBOSE=0
+
+# Check for arguments
+if [[ $# -lt 1 ]] ; then
+    print_usage
+fi
+I=0
+while [[ "$#" -ge 1 ]] ; do
+    case "$1" in
+        "-?"|-h|--help)
+            print_usage
+        ;;
+        -v|--verbose)
+            VERBOSE=1
+        ;;
+        *)
+            case "$I" in
+                0)
+                    printf -v PEERCOUNT '%d' "$1"
+                ;;
+                *)
+                    echo "Unknown parameter \"$1\"" >&2
+                    exit 1
+                ;;
+            esac
+            I=$((I+1))
+        ;;
+    esac
+    shift
+done
 
 # Check workdir
 if [[ -z "$WORKDIR" ]] || [[ ! -d "$WORKDIR" ]] || [[ "$(readlink -f "$WORKDIR")" == "/" ]]; then
@@ -24,7 +74,6 @@ if ! /synctool-setup.sh >&2 ; then
 fi
 
 # Set up peers
-printf -v PEERCOUNT '%d' "$1"
 if [[ $PEERCOUNT -gt 0 ]] ; then
     echo "[$(date +%s.%N)] Setting up $PEERCOUNT peers ..." >&2
 
@@ -33,10 +82,21 @@ if [[ $PEERCOUNT -gt 0 ]] ; then
         while [[ ! -f "$DATAVOLUME/$I.state" ]] ; do
             inotifywait -qqt 2 -e create -e moved_to "$DATAVOLUME" || true
         done
+        if [[ $VERBOSE ]] ; then
+            echo "[$(date +%s.%N)] Peer $I state report found." >&2
+        fi
     done
 else
-    echo "[$(date +%s.%N)] No peers configured, running in stand-alone mode" >&2
+    if [[ $PEERCOUNT -lt 0 ]] ; then
+        echo -e "[$(date +%s.%N)] \e[91mInvalid peer count argument.\e[0m" >&2
+        exit 1
+    else
+        echo "[$(date +%s.%N)] No peers configured, running in stand-alone mode" >&2
+    fi
 fi
+
+# Reset current directory
+cd /
 
 # Logging directory
 LOGDIR="$DATAVOLUME/logs"
@@ -44,6 +104,9 @@ mkdir -p "$LOGDIR"
 
 # Generate random seed which may be used by tests
 SEED=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 16 | head -n 1)
+if [[ $VERBOSE ]] ; then
+    echo "[$(date +%s.%N)] Random seed: $SEED" >&2
+fi
 
 # Keep track of previous state to detect no-ops
 PREVIOUSSTATE='none'
@@ -75,6 +138,9 @@ for TESTSCRIPT in /synctool-start.sh /tests/*.sh /synctool-stop.sh ; do
     if [[ $PEERCOUNT -gt 0 ]] ; then
         # Create a snapshot of the state of the directory
         STATE=$(find "$WORKDIR" \( ! -regex '.*/\..*' \) -type f -exec cksum {} \; | sort)
+        if [[ $VERBOSE ]] ; then
+            echo -e "[$(date +%s.%N)] Current state:\n$STATE" >&2
+        fi
         
         # Check for no-ops
         if [[ "$STATE" == "$PREVIOUSSTATE" ]] && [[ "$TESTSCRIPT" != "/synctool-stop.sh" ]] ; then
@@ -85,8 +151,15 @@ for TESTSCRIPT in /synctool-start.sh /tests/*.sh /synctool-stop.sh ; do
         # Wait for all peers report an identical state
         for (( I=1 ; I <= $PEERCOUNT; I++)) ; do
             while [[ "$(cat "$DATAVOLUME/$I.state")" != "$STATE" ]] ; do
+                if [[ $VERBOSE ]] ; then
+                    echo "[$(date +%s.%N)] Peer $I reported (unequal) state:" >&2
+                    cat "$DATAVOLUME/$I.state" >&2
+                fi
                 inotifywait -qqt 2 -e modify "$DATAVOLUME/$I.state" || true
             done
+            if [[ $VERBOSE ]] ; then
+                echo "[$(date +%s.%N)] Peer $I reported identical state." >&2
+            fi
         done
         echo -e "[$(date +%s.%N)] All $PEERCOUNT peers reported an identical state after ~$(echo $(date +%s.%N) - $TESTTIME | bc) seconds" >&2
     fi

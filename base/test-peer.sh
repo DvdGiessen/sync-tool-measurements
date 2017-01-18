@@ -1,6 +1,56 @@
 #!/bin/bash
+if [ -z "$BASH" ] ; then
+    echo "This script must be run with bash" >&2
+    exit 1
+fi
 set -eu
-cd /
+
+# Usage / help text
+print_usage() {
+    echo "Usage: $0 [-v] PEERNUMBER"
+    echo ""
+    echo "Sets up a test peer into the current Docker container."
+    echo ""
+    echo "Options:"
+    echo "    -?             Print this message."
+    echo "    -v             Enable verbose output."
+    echo "    PEERNUMBER     Number of this peer."
+    echo ""
+    exit 1
+}
+
+# Define argument variables
+PEERNUMBER=-1
+VERBOSE=0
+
+# Check for arguments
+if [[ $# -lt 1 ]] ; then
+    print_usage
+fi
+I=0
+while [[ "$#" -ge 1 ]] ; do
+    case "$1" in
+        "-?"|-h|--help)
+            print_usage
+        ;;
+        -v|--verbose)
+            VERBOSE=1
+        ;;
+        *)
+            case "$I" in
+                0)
+                    printf -v PEERNUMBER '%d' "$1"
+                ;;
+                *)
+                    echo "Unknown parameter \"$1\"" >&2
+                    exit 1
+                ;;
+            esac
+            I=$((I+1))
+        ;;
+    esac
+    shift
+done
 
 # Check workdir
 if [[ -z "$WORKDIR" ]] || [[ ! -d "$WORKDIR" ]] || [[ "$(readlink -f "$WORKDIR")" == "/" ]]; then
@@ -19,11 +69,13 @@ if [[ -f "$DATAVOLUME/done" ]] ; then
 fi
 
 # Check peer number
-printf -v PEERNUMBER '%d' "$1"
 if [[ $PEERNUMBER -le 0 ]] ; then
     echo -e "[$(date +%s.%N)] \e[91mInvalid peer number argument.\e[0m" >&2
     exit 1
 fi
+
+# Reset current directory
+cd /
 
 # Setup the sync tool
 echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Executing sync tool setup ..." >&2
@@ -54,7 +106,11 @@ fi
 while [[ ! -f "$DATAVOLUME/done" ]] ; do
     STATE=$(find "$WORKDIR" \( ! -regex '.*/\..*' \) -type f -exec cksum {} \; | sort)
     if [[ ! -f "$DATAVOLUME/$PEERNUMBER.state" ]] || [[ "$(cat "$DATAVOLUME/$PEERNUMBER.state")" != "$STATE" ]] ; then
-        echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Reporting state change ..." >&2
+        if [[ $VERBOSE ]] ; then
+            echo -e "[$(date +%s.%N)] [Peer $PEERNUMBER] Reporting state change:\n$STATE" >&2
+        else
+            echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Reporting state change ..." >&2
+        fi
         echo "$STATE" > "$DATAVOLUME/$PEERNUMBER.state"
     fi
     inotifywait -qqrt 5  -e create -e move -e modify -e delete "$WORKDIR" || true
