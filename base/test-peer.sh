@@ -74,6 +74,13 @@ if [[ $PEERNUMBER -le 0 ]] ; then
     exit 1
 fi
 
+# Set up verbose file descriptor
+if [[ $VERBOSE ]] ; then
+    exec 3> >(sed --unbuffered -r "s/.*/\x1B\[96m&\x1B\[0m/g" >&2)
+else
+    exec 3>/dev/null
+fi
+
 # Reset current directory
 cd /
 
@@ -107,11 +114,12 @@ while [[ ! -f "$DATAVOLUME/done" ]] ; do
     STATE=$(find "$WORKDIR" \( ! -regex '.*/\..*' \) -type f -exec cksum {} \; | sort)
     if [[ ! -f "$DATAVOLUME/$PEERNUMBER.state" ]] || [[ "$(cat "$DATAVOLUME/$PEERNUMBER.state")" != "$STATE" ]] ; then
         if [[ $VERBOSE ]] ; then
-            echo -e "[$(date +%s.%N)] [Peer $PEERNUMBER] Reporting state change:\n$STATE" >&2
+            echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Reporting state change:" >&2
+            echo "$STATE" >&3
         else
             echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Reporting state change ..." >&2
         fi
-        echo "$STATE" > "$DATAVOLUME/$PEERNUMBER.state"
+        flock --exclusive --timeout 1 "$DATAVOLUME/$PEERNUMBER.lock" -c "echo \"$STATE\" > \"$DATAVOLUME/$PEERNUMBER.state\""
     fi
     inotifywait -qqrt 5  -e create -e move -e modify -e delete "$WORKDIR" || true
 done

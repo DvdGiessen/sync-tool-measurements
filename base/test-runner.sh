@@ -66,6 +66,13 @@ if [[ -z "$DATAVOLUME" ]] || [[ ! -d "$DATAVOLUME" ]] || [[ "$(readlink -f "$DAT
 fi
 rm -rf "$DATAVOLUME"/*
 
+# Set up verbose file descriptor
+if [[ $VERBOSE ]] ; then
+    exec 3> >(sed --unbuffered -r "s/.*/\x1B\[96m&\x1B\[0m/g" >&2)
+else
+    exec 3>/dev/null
+fi
+
 # Setup the sync tool
 echo "[$(date +%s.%N)] Executing sync tool setup ..." >&2
 if ! /synctool-setup.sh >&2 ; then
@@ -139,7 +146,7 @@ for TESTSCRIPT in /synctool-start.sh /tests/*.sh /synctool-stop.sh ; do
         # Create a snapshot of the state of the directory
         STATE=$(find "$WORKDIR" \( ! -regex '.*/\..*' \) -type f -exec cksum {} \; | sort)
         if [[ $VERBOSE ]] ; then
-            echo -e "[$(date +%s.%N)] Current state:\n$STATE" >&2
+            echo -e "[$(date +%s.%N)] Current state:\n$STATE" >&3
         fi
         
         # Check for no-ops
@@ -150,10 +157,10 @@ for TESTSCRIPT in /synctool-start.sh /tests/*.sh /synctool-stop.sh ; do
 
         # Wait for all peers report an identical state
         for (( I=1 ; I <= $PEERCOUNT; I++)) ; do
-            while [[ "$(cat "$DATAVOLUME/$I.state")" != "$STATE" ]] ; do
+            while [[ "$(flock --shared  --timeout 1 "$DATAVOLUME/$I.lock" -c "cat \"$DATAVOLUME/$I.state\"")" != "$STATE" ]] ; do
                 if [[ $VERBOSE ]] ; then
                     echo "[$(date +%s.%N)] Peer $I reported (unequal) state:" >&2
-                    cat "$DATAVOLUME/$I.state" >&2
+                    flock --shared  --timeout 1 "$DATAVOLUME/$I.lock" -c "cat \"$DATAVOLUME/$I.state\"" >&3
                 fi
                 inotifywait -qqt 2 -e modify "$DATAVOLUME/$I.state" || true
             done

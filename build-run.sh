@@ -78,7 +78,7 @@ fi
 
 # Set up verbose parameters
 if [[ $VERBOSE ]] ; then
-    exec 3>&1
+    exec 3> >(sed --unbuffered -r "s/.*/\x1B\[36m&\x1B\[0m/g")
     VERBOSEPARAM="-v"
 else
     exec 3>/dev/null
@@ -111,6 +111,10 @@ if [[ $PEERCOUNT -gt 0 ]] ; then
             done
             docker rm -f "$RUNNER" >/dev/null
             exit 1
+        else
+            if [[ $VERBOSE ]] ; then
+                docker logs --follow "${PEERS[$((I - 1))]}" >&3 &
+            fi
         fi
     done
 fi
@@ -122,6 +126,9 @@ if docker start -ai "$RUNNER" > results.tar ; then
 else
     echo -e "[$(date +%s.%N)] \e[91mExecuting test runner failed!\e[0m" >&2
 fi
+
+# Insert container logs into the result tarball
+# TODO
 
 # Destroy all containers
 echo "[$(date +%s.%N)] Removing containers ..."
