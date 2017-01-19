@@ -132,7 +132,7 @@ fi
 
 # Start the test runner
 echo "[$(date +%s.%N)] Executing test runner ..."
-RESULTFILE="results-$SYNCTOOL-$PEERCOUNT.tar"
+RESULTFILE="results-$SYNCTOOL-$PEERCOUNT.tar.gz"
 if docker start -ai "$RUNNER" | gzip -c9 > "$RESULTFILE" ; then
      echo "[$(date +%s.%N)] Saved test results to \"$RESULTFILE\"."
 else
