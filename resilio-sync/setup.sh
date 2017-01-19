@@ -28,10 +28,10 @@ else
 fi
 
 # Link the logfile
+mkdir -p /root/.sync
 ln -s "$DATAVOLUME/logs/$PEERNAME.log" /root/.sync/sync.log
 
 # Build the configuration file
-mkdir -p /root/.sync
 cat /rslsync-config-template.json \
     | sed "s/\\\$PEERNAME/$(hostname | sed -e 's/[\/&]/\\&/g')/g" \
     | sed "s/\\\$PORT/$(echo "$PORT" | sed -e 's/[\/&]/\\&/g')/g" \

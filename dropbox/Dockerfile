@@ -12,6 +12,9 @@ RUN curl -LSs "$DROPBOX_DAEMON_URL" | tar xzf - -C ~ && ln -s ~/.dropbox-dist/dr
 # Download and install the Dropbox CLI client
 RUN curl -LSs "$DROPBOX_CLI_URL" > /usr/local/bin/dropbox && chmod 555 /usr/local/bin/dropbox
 
+# Open port for LAN sync
+EXPOSE 17500
+
 # Setup scripts
 COPY ["setup.sh", "/synctool-setup.sh"]
 COPY ["start.sh", "/synctool-start.sh"]
