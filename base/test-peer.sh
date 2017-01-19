@@ -74,33 +74,37 @@ if [[ $PEERNUMBER -le 0 ]] ; then
     exit 1
 fi
 
+# Peer name
+PEERNAME="peer-$PEERNUMBER"
+
 # Set up verbose file descriptor
-if [[ $VERBOSE ]] ; then
+if [[ $VERBOSE -eq 1 ]] ; then
     exec 3> >(sed --unbuffered -r "s/.*/\x1B\[96m&\x1B\[0m/g" >&2)
 else
     exec 3>/dev/null
 fi
 
+# Dir for logfiles
+LOGDIR="$DATAVOLUME/logs"
+mkdir -pm 0777 "$LOGDIR"
+
+# Set up log copy of output
+exec 2> >(tee "$LOGDIR/$PEERNAME.log" >&2)
+
 # Reset current directory
 cd /
-
 # Setup the sync tool
 echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Executing sync tool setup ..." >&2
-if ! /synctool-setup.sh >&2 ; then
+if ! /synctool-setup.sh "$PEERNAME" >&2 ; then
     echo -e "[$(date +%s.%N)] [Peer $PEERNUMBER] \e[91mSync tool setup failed.\e[0m" >&2
     exit 1
 fi
 
-# Base name for logfiles
-LOGDIR="$DATAVOLUME/logs"
-mkdir -p "$LOGDIR"
-LOGFILE="$LOGDIR/peer-$PEERNUMBER"
-
 # Start inotifywait and tcpdump to monitor disk and network activity
 echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Setting up monitoring ..." >&2
-inotifywait -mr "$WORKDIR" > >( while IFS= read -r line ; do echo "$(date +%s.%N) $line" ; done > "$LOGFILE.inotifywaitlog" ) 2>&1 &
+inotifywait -mr "$WORKDIR" > >( while IFS= read -r line ; do echo "$(date +%s.%N) $line" ; done > "$LOGDIR/$PEERNAME-inotifywait.log" ) 2>&1 &
 INOTIFYWAIT_PID=$!
-tcpdump -i any -s0 -w "$LOGFILE.tcpdumpdata" > "$LOGFILE.tcpdumplog" 2>&1 &
+tcpdump -i any -s0 -w "$LOGDIR/$PEERNAME-tcpdump.pcap" > "$LOGDIR/$PEERNAME-tcpdump.log" 2>&1 &
 TCPDUMP_PID=$!
 
 echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Starting sync tool ..." >&2
@@ -113,7 +117,7 @@ fi
 while [[ ! -f "$DATAVOLUME/done" ]] ; do
     STATE=$(find "$WORKDIR" \( ! -regex '.*/\..*' \) -type f -exec cksum {} \; | sort)
     if [[ ! -f "$DATAVOLUME/$PEERNUMBER.state" ]] || [[ "$(cat "$DATAVOLUME/$PEERNUMBER.state")" != "$STATE" ]] ; then
-        if [[ $VERBOSE ]] ; then
+        if [[ $VERBOSE -eq 1 ]] ; then
             echo "[$(date +%s.%N)] [Peer $PEERNUMBER] Reporting state change:" >&2
             echo "$STATE" >&3
         else
@@ -136,6 +140,7 @@ kill -s TERM $INOTIFYWAIT_PID
 wait $INOTIFYWAIT_PID 2>/dev/null || true
 kill -s TERM $TCPDUMP_PID
 wait $TCPDUMP_PID 2>/dev/null || true
+sync
 
 # Remove state report
 rm "$DATAVOLUME/$PEERNUMBER.state"

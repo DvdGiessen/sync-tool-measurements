@@ -1,0 +1,19 @@
+{
+    "device_name": "$PEERNAME",
+    "storage_path": "/root/.sync",
+    "listening_port": $PORT,
+    "use_upnp": true,
+    "download_limit": 0,
+    "upload_limit": 0,
+    "shared_folders": [{
+        "secret": "$SYNCSECRET",
+        "dir": "$WORKDIR",
+        "use_relay_server": true,
+        "use_tracker": true,
+        "search_lan": true,
+        "use_sync_trash": false,
+        "overwrite_changes": true,
+        "selective_sync": false,
+        "known_hosts": [$KNOWNHOSTS]
+    }]
+}

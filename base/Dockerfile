@@ -2,7 +2,7 @@
 FROM ubuntu:16.10
 
 # Install dependencies
-RUN apt-get update && apt-get install -y bc curl inotify-tools tcpdump
+RUN apt-get update && apt-get install -y bc curl inotify-tools net-tools tcpdump
 
 # Directory to be synced
 ENV WORKDIR /workdir
